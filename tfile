@@ -1,0 +1,102 @@
+#!/bin/bash
+
+# Just colors
+GREEN="\033[0;32m"
+YELLOW="\033[0;33m"
+BLUE="\033[0;34m"
+RED="\033[0;31m"
+RESET="\033[0m"
+
+# Parse script params
+parse_params() {
+  COMMAND="${1}"
+  FILE="${2}"
+
+  while :; do
+    case ${COMMAND} in
+      # Display help
+      -h | --help) 
+        help 
+        exit 0
+        ;;
+      # Set Terraform logging level to DEBUG
+      -v | --verbose) 
+        export TF_LOG="DEBUG"
+        # Move arguments to the left
+        shift
+        COMMAND="${1}"
+        FILE="${2}"
+        ;;
+      # Other
+      -*|--*)
+        echo -e "${RED}Unknown option \"$1\"!${RESET}"  
+        exit 1
+        ;;
+    esac
+    break
+  done
+}
+
+# Display Help
+help() {
+  echo -e "${GREEN} _______  _______  ___   ___      _______ "
+  echo -e "|       ||       ||   | |   |    |       |"
+  echo -e "|_     _||    ___||   | |   |    |    ___|"
+  echo -e "  |   |  |   |___ |   | |   |    |   |___ "
+  echo -e "  |   |  |    ___||   | |   |___ |    ___|"
+  echo -e "  |   |  |   |    |   | |       ||   |___ "
+  echo -e "  |___|  |___|    |___| |_______||_______|${RESET}"
+  echo
+  echo "Description:"
+  echo 
+  echo -e "    ${GREEN}TFile${RESET} - is a ${BLUE}Terraform${RESET} tool that allows anyone to target all resources in a specific file"
+  echo
+  echo "Syntax:"
+  echo
+  echo -e "    ${GREEN}tfile${RESET} ${YELLOW}[-options]${RESET} ${BLUE}apply|plan|destroy${RESET} path_to_file"
+  echo
+  echo "options:"
+  echo
+  echo -e "    ${YELLOW}-h | --help${RESET}       Print this Help."
+  echo -e "    ${YELLOW}-v | --verbose${RESET}    Verbose mode."
+  echo
+
+  exit 0
+}
+
+# Parse terraform resources
+parse_targets() {
+  resources=()
+
+  # Check if a file exists
+  if [[ ! -f "${FILE}" ]]; then
+    echo -e "${RED}File \"${FILE}\" does not exist!${RESET}"
+    exit 1
+  fi
+  
+  # Create resources list from file
+  while read -r line; do
+    if [[ "${line}" =~ ^(data \"|resource \"|module \").*\{\}? ]]; then
+      resources+=($(echo "${line}" | sed -Er 's/resource "//; s/(^[a-z_]*) "/\1./; s/" "/./; s/" \{\}?$//'))
+    fi
+  done <<< "$(cat "${FILE}")"
+}
+
+# Run terraform
+main() {
+  # Check action
+  if [[ ! "${COMMAND}" =~ (apply|destroy|plan) ]]; then
+    echo -e "${RED}Only \"apply\", \"plan\" or \"destroy\" Terraform operations are supported!${RESET}"
+    exit 1
+  fi
+  
+  # Execute Terraform code
+  echo -e "> terraform ${COMMAND} ${GREEN}${resources[@]/#/-target }${RESET}"
+  terraform ${COMMAND} ${resources[@]/#/-target }
+  
+  exit 0
+} 
+
+parse_params "${@}"
+parse_targets
+main
